@@ -72,7 +72,7 @@ Use the tools in `2_Model_Export` to prepare the model for different hardware:
 
 ---
 
-## 🏆 AMD Pervasive AI Developer Contest 2024
+## 🏆 AMD Pervasive AI Developer Contest 2026
 This project showcases the full spectrum of AMD's AI ecosystem—from massive-scale training on **CDNA™ 3** accelerators to real-time execution on consumer hardware via **DirectML**.
 
 ---
