@@ -1,0 +1,48 @@
+#pragma kernel PackInput
+
+Texture2D<float4> RGBTexture;
+Texture2D<float> DepthTexture;
+Texture2D<float4> PrevWarpedTexture;
+
+RWStructuredBuffer<float> TensorBuffer;
+
+uint width;
+uint height;
+
+[numthreads(8, 8, 1)]
+void PackInput (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= width || id.y >= height) return;
+
+    // Flip Y para PyTorch/ONNX (formato NCHW donde 0,0 es arriba-izquierda)
+    uint y_onnx = height - 1 - id.y;
+    uint pixelIndex = y_onnx * width + id.x;
+    uint frameSize = width * height;
+
+    float4 rgb = RGBTexture[id.xy];
+    float depth = DepthTexture[id.xy];
+    float4 prev = PrevWarpedTexture[id.xy];
+
+    // NORMALIZACIÓN COMERCIAL: Clamping + Corrección Gamma (Linear -> sRGB)
+    // saturate() asegura que nada pase de 1.0 (evita alucinaciones en el cielo)
+    // pow(x, 0.4545) corrige el efecto "lavado" si el proyecto está en Linear
+    float3 correctedRGB = saturate(rgb.rgb);
+    correctedRGB = pow(correctedRGB, 0.454545); 
+
+    // Canal 0, 1, 2: RGB (Camara actual)
+    TensorBuffer[0 * frameSize + pixelIndex] = correctedRGB.r;
+    TensorBuffer[1 * frameSize + pixelIndex] = correctedRGB.g;
+    TensorBuffer[2 * frameSize + pixelIndex] = correctedRGB.b;
+
+    // Canal 3: Depth
+    TensorBuffer[3 * frameSize + pixelIndex] = depth;
+
+    // Canal 4, 5, 6: Memoria del frame anterior deformada (Warped)
+    // FIX: Aplicar MISMA corrección gamma que al RGB actual (espacio de color consistente)
+    // Sin esto, la red ve canales 4-6 en espacio diferente → manchas moviéndose en paredes
+    float3 correctedPrev = saturate(prev.rgb);
+    correctedPrev = pow(correctedPrev, 0.454545); // ← Mismo gamma que correctedRGB
+    TensorBuffer[4 * frameSize + pixelIndex] = correctedPrev.r;
+    TensorBuffer[5 * frameSize + pixelIndex] = correctedPrev.g;
+    TensorBuffer[6 * frameSize + pixelIndex] = correctedPrev.b;
+}
